@@ -1,7 +1,10 @@
 
+import ConfigParser
 from datetime import date
-from os import path, pathsep
-import re
+import os
+import shutil
+import StringIO
+from . import shell
 
 
 def backup(provider,
@@ -14,8 +17,7 @@ def backup(provider,
         encrypt="AES256",
         encrypt_key_file="/etc/xtrabackupcloud/key",
         encrypt_threads=4,
-        full_date_formatter="%d",
-        full_date_match="01",
+        full=True,
         log="/var/log/xtrabackupcloud.log",
         mount_device="",
         prefix="backup",
@@ -23,26 +25,46 @@ def backup(provider,
         verbose=0,
         working_dir=""
 ):
-    working_dir = path.expanduser(working_dir)
-
     if temp_block_storage:
         provider.create_block_storage(block_storage_name, block_storage_size)
 
-    if mount_device:
-        _mount_storage(mount_device, path.join(pathsep, [working_dir, 'mnt']))
+    working_dir = os.path.expanduser(working_dir)
+    if not os.path.exists(working_dir):
+        os.mkdir(working_dir, 0750)
 
-    today = date.today()
-    if _date_is_fullbackup(today, full_date_formatter, full_date_match):
-        pass
+    if mount_device:
+        _mount_storage(mount_device, os.path.join(working_dir, 'mnt'))
+
+    base_date = _get_base_date(working_dir) if full or None
+    lsn = _get_lsn(working_dir) if full or None
+
+    # can only do an incremental backup if we've previously stored the base_date and lsn
+    incremental = base_date and lsn
+    if not incremental:
+        base_date = date.today().strftime('%Y-%m-%d')
 
 
 def _mount_storage(mount_device, mount_dir):
-    if not path.ismount(mount_dir):
-        pass
+    # already mounted?
+    if path.ismount(mount_dir):
+        return
+
+    shell.prepare_backup_device(mount_device)
+    shell.mount(mount_dir)
 
 
-def _date_is_fullbackup(date, full_date_formatter, full_date_match):
+def _get_lsn(working_dir):
+    checkpoint_file = working_dir + '/xtrabackup_checkpoints'
+    if os.path.exists(checkpoint_file):
+        shutil.copy(checkpoint_file, checkpoint_file + '.bak')
+        cp_string = '[default]\n' + open(checkpoint_file).read()
+        checkpoints = ConfigParser.SafeConfigParser()
+        checkpoints.readfp(StringIO.StringIO(cp_string))
+        return checkpoints.get('default', 'to_lsn')
 
-    return re.compile(full_date_match).match(date.strftime(full_date_formatter))
 
-
+def _get_base_date(working_dir):
+    file = working_dir + '/base_date'
+    if os.path.exists(file):
+        with open(file, 'r') as base:
+            return base.readline()

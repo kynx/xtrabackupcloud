@@ -21,6 +21,7 @@ def main():
         "encrypt": "AES256",
         "encrypt-key-file": "/etc/xtrabackupcloud/key",
         "encrypt-threads": "4",
+        "full": "yes",
         "log": "/var/log/xtrabackupcloud.log",
         "mount-device": "",
         "mount-dir": "/mnt/backup",
@@ -118,6 +119,12 @@ def main():
         type=int,
         default=config.getint("xtrabackupcloud", "block-storage-size"),
         help="Size of block storage in gigabytes"
+    )
+    backup_parser.add_argument(
+        "--full",
+        action="store_true",
+        default=True,
+        help="Perform full backup"
     )
     backup_parser.add_argument(
         "--log",
