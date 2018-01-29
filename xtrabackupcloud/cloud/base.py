@@ -10,25 +10,19 @@ class Base(object):
         self.delay = delay
         self.fails = 0
 
-    def get_block_storage(self, block_storage_name):
-        raise NotImplementedError
-
-    def create_block_storage(self, server, block_storage_name, block_storage_size):
+    def create_block_storage(self, block_storage_name, block_storage_size, mount_device):
         raise NotImplementedError
 
     def delete_block_storage(self, block_storage_name):
-        raise NotImplementedError
-
-    def container_exists(self, container):
-        raise NotImplementedError
-
-    def create_container(self, container):
         raise NotImplementedError
 
     def list(self, container, prefix):
         raise NotImplementedError
 
     def upload(self, path, container, name):
+        raise NotImplementedError
+
+    def store(self, content, container, name):
         raise NotImplementedError
 
     def download(self, container, name, path):

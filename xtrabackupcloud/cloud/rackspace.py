@@ -1,5 +1,6 @@
 
 import base
+import platform
 import pyrax
 
 
@@ -12,8 +13,8 @@ class Rackspace(base.Base):
         pyrax.set_setting("use_servicenet", use_servicenet)
         pyrax.set_credentials(username, api_key, region)
 
-    def get_block_storage(self, block_storage_name):
-        return self._attempt(self._get_block_storage, block_storage_name)
+    def create_block_storage(self, block_storage_name, block_storage_size, mount_device):
+        self._attempt(self._create_block_storage, block_storage_name, block_storage_size, mount_device)
 
     def _get_block_storage(self, block_storage_name):
         cbs = pyrax.cloud_blockstorage
@@ -21,42 +22,48 @@ class Rackspace(base.Base):
         if len(block_storage):
             return block_storage[0]
 
-    def create_block_storage(self, server, block_storage_name, block_storage_size):
-        if not self.get_block_storage(block_storage_name):
-            self._attempt(self._create_block_storage, server, block_storage_name, block_storage_size)
-
-    def _create_block_storage(self, server, block_storage_name, block_storage_size):
+    def _create_block_storage(self, block_storage_name, block_storage_size, mount_device):
         vol = self._get_block_storage(block_storage_name)
         if not vol:
             cbs = pyrax.cloud_blockstorage
             vol = cbs.create(name=block_storage_name, size=block_storage_size)
             pyrax.utils.wait_until(vol, 'status', 'available', attempts=0)
 
-        vol.attach_to_instance(server, mountpoint=mount_device)
+        vol.attach_to_instance(platform.node(), mountpoint=mount_device)
         pyrax.utils.wait_until(vol, 'status', 'in-use', attempts=0)
 
-    def delete_block_storage(self, server, block_storage_name):
-        self._attempt(self._delete_block_storage, server, block_storage_name)
+    def delete_block_storage(self, block_storage_name):
+        self._attempt(self._delete_block_storage, block_storage_name)
 
     def _delete_block_storage(self, block_storage_name):
         block_storage = self._get_block_storage(block_storage_name)
         if block_storage.status != 'available':
             block_storage.detach()
-            pyrax.utils.wait_until(vol, 'status', 'available', attempts=0)
+            pyrax.utils.wait_until(block_storage, 'status', 'available', attempts=0)
         block_storage.delete()
-
-    def container_exists(self, container):
-        pass
-
-    def create_container(self, container):
-        pass
 
     def list(self, container, prefix):
         pass
 
     def upload(self, path, container, name):
-        pass
+        self._attempt(self._upload, container, name)
+
+    def _upload(self, path, container, name):
+        cf = pyrax.cloudfiles
+        container = cf.create_container(container)
+        container.upload_file(path, name)
+
+    def store(self, content, container, name):
+        self._attempt(self._store, content, container, name)
+
+    def _store(self, content, container, name):
+        cf = pyrax.cloudfiles
+        container = cf.create_container(container)
+        container.store_object(name, content)
 
     def download(self):
+        pass
+
+    def delete(self, container, name):
         pass
 

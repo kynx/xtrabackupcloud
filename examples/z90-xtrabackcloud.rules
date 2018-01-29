@@ -1,0 +1,11 @@
+# Allow backup user to format and mount backup block storage
+#
+# In this example we change ownership of /dev/backup to the "backup"
+# group so the xtrabackupcloud can format and mount the device
+#
+# Modify to match the device_name and group running the backup and copy
+# to /etc/udev/rules.d
+#
+# See http://reactivated.net/writing_udev_rules.html#ownership
+
+KERNEL=="backup*", GROUP="backup"

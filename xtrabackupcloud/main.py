@@ -2,6 +2,7 @@ import argparse
 from ConfigParser import ConfigParser
 from os import path
 from platform import node
+import StringIO
 
 from . import backup, restore
 from cloud import *
@@ -13,25 +14,18 @@ def main():
     defaults = {
         "block-storage-name": node() + "-xtrabackupcloud",
         "block-storage-size": "100",
-        "compact": "yes",
-        "compress-threads": "4",
         "container": "xtrabackup",
         "datadir": "/var/lib/mysql",
         "delay": "60",
-        "encrypt": "AES256",
-        "encrypt-key-file": "/etc/xtrabackupcloud/key",
-        "encrypt-threads": "4",
-        "full": "yes",
-        "log": "/var/log/xtrabackupcloud.log",
+        "log-level": "info",
+        "log-file": None,
         "mount-device": "",
         "mount-dir": "/mnt/backup",
         "prefix": node(),
         "provider": "rackspace",
         "retry": "5",
-        "server-name": node(),
-        "slave-info": "yes",
-        "temp-block-storage": "yes",
-        "working-dir": path.expanduser("~/xtrabackup_backupfiles")
+        "temp-block-storage": "no",
+        "working-dir": "~/xtrabackup_backupfiles"
     }
 
     config = ConfigParser(defaults, allow_no_value=True)
@@ -41,18 +35,6 @@ def main():
 
     parser = argparse.ArgumentParser(description="MySQL backup to cloud provider")
     parser.add_argument(
-        "--compact",
-        action="store_true",
-        default=config.getboolean("xtrabackup", "compact"),
-        help="Remove / rebuild secondary indexes"
-    )
-    parser.add_argument(
-        "--compress-threads",
-        type=int,
-        default=config.getint("xtrabackup", "compress-threads"),
-        help="Number of threads to use when compressing"
-    )
-    parser.add_argument(
         "--container",
         default=config.get("xtrabackupcloud", "container"),
         help="Container to store backup in"
@@ -61,23 +43,6 @@ def main():
         "--delay",
         default=config.get("xtrabackupcloud", "delay"),
         help="Seconds between re-trying cloud operations"
-    )
-    parser.add_argument(
-        "--encrypt",
-        choices=["AES128", "AES192", "AES256"],
-        default=config.get("xtrabackup", "encrypt"),
-        help="Encryption algorithm"
-    )
-    parser.add_argument(
-        "--encrypt-key-file",
-        default=config.get("xtrabackup", "encrypt-key-file"),
-        help="Encryption key"
-    )
-    parser.add_argument(
-        "--encrypt-threads",
-        type=int,
-        default=config.getint("xtrabackup", "encrypt-threads"),
-        help="Number of threads to use when encrypting"
     )
     parser.add_argument(
         "--extra-config",
@@ -101,11 +66,6 @@ def main():
         help="Number of times to re-try failed cloud operations"
     )
     parser.add_argument(
-        "-v",
-        action="count",
-        help="Be verbose (use -vvv to see output from xtrabackup)"
-    )
-    parser.add_argument(
         "--working-dir",
         default=config.get("xtrabackupcloud", "working-dir"),
         help="Working directory"
@@ -115,36 +75,36 @@ def main():
 
     backup_parser = subparsers.add_parser("backup", help="Perform backup")
     backup_parser.add_argument(
+        "--block-storage-name",
+        type=int,
+        default=config.getint("xtrabackupcloud", "block-storage-name"),
+        help="Name of block storage"
+    )
+    backup_parser.add_argument(
         "--block-storage-size",
         type=int,
         default=config.getint("xtrabackupcloud", "block-storage-size"),
         help="Size of block storage in gigabytes"
     )
     backup_parser.add_argument(
-        "--full",
-        action="store_true",
-        default=True,
-        help="Perform full backup"
+        "--incremental",
+        action="set_true",
+        help="Perform incremental backup"
     )
     backup_parser.add_argument(
-        "--log",
-        default=config.get("xtrabackupcloud", "log"),
+        "--log-file",
+        default=config.get("xtrabackupcloud", "log-file"),
         help="File to log backups progress"
+    )
+    backup_parser.add_argument(
+        "--log-level",
+        default=config.get("xtrabackupcloud", "log-level"),
+        help="Log level (ie 'info', 'warn')"
     )
     backup_parser.add_argument(
         "--mount-device",
         default=config.get("xtrabackupcloud", "mount-device"),
-        help="Device name to mount block storage on (ie '/dev/xvdb')"
-    )
-    backup_parser.add_argument(
-        "--server-name",
-        default=config.get("xtrabackupcloud", "server-name"),
-        help="Server name"
-    )
-    backup_parser.add_argument(
-        "--slave-info",
-        action="store_true",
-        default=config.getboolean("xtrabackup", "slave-info")
+        help="Device name to mount block storage on (ie '/dev/xvdb1')"
     )
     backup_parser.add_argument(
         "--temp-block-storage",
@@ -168,6 +128,22 @@ def main():
         config.read(path.expanduser(extra_config))
 
     args.func(_get_provider(args, config), args)
+
+
+def parse_checkpoint_file(checkpoint_file):
+    parsed = {}
+    if path.exists(checkpoint_file):
+        config = ConfigParser()
+        cp_string = '[default]\n' + open(checkpoint_file).read()
+        config.readfp(StringIO.StringIO(cp_string))
+        for option in config.options('default'):
+            parsed[option] = config.get('default', option)
+
+    return parsed
+
+
+def get_checkpoint_file(working_dir):
+    return path.join(working_dir, 'xtrabackup_checkpoints')
 
 
 def _get_provider(args, config):
